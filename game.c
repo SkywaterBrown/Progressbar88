@@ -2,9 +2,9 @@
 ===================
     SEGMENTS
 ===================
-1 - Blue   ' '  -  %25
+1 - Blue   '+'  -  %25
 2 - Cyan   'X'  -  %10
-3 - Yellow ' '  -  %25
+3 - Yellow 'n'  -  %25
 4 - Pink   '-'  -  %15
 5 - Gray   '0'  -  %15
 6 - Red    '!'  -  %8
@@ -15,10 +15,12 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <ncurses.h>
 #include <string.h>
 #include <time.h>
 
+#define BAR_FILL_COUNT 20
 #define TARGET_FPS 60
 #define FRAME_DURATION_NS (1000000000 / TARGET_FPS)
 #define MAX_SEGMENTS 20
@@ -28,40 +30,43 @@ char key;
 WINDOW *bar;
 struct BarStruct{
 	int X, Y, height, width;
-	char include[11];
+	char include[BAR_FILL_COUNT];
 };
 struct Segments{
 	int type;
 	char symbol;
 	double x ,y, speed;
 };
-
-
+struct Mouse{
+	int X, Y;
+};
 
 void get_input();
-void draw_bar(int height, int width, int start_y, int start_x);
+void draw_bar(struct BarStruct *Bar, int height, int width, int start_y, int start_x);
 void erase_bar(int height, int width, int start_y, int start_x);
 void draw_segments(struct Segments segments[MAX_SEGMENTS], int segment_count);
 void erase_segments(struct Segments segments[MAX_SEGMENTS], int segment_count);
-void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_ptr);
+void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_ptr, struct BarStruct *Bar);
 
 int main(int argc, char *argv[])
 {
 	 if(argc==2 && !strcmp(argv[1], "debug")) { isdebug=1; }
 	 
+//	 printf("\033[?1003h\n");
+//	 fflush(stdout);
+	 
 	 initscr();
+	 cbreak();
 	 noecho();
 	 curs_set(0);
 	 keypad(stdscr, TRUE);
 	 nodelay(stdscr, TRUE);
 	 mousemask(ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, NULL);
 	 mouseinterval(0);
-	 printf("\033[?1003h\n");  // Enable all mouse events
-	 fflush(stdout);
 	 if(has_colors() == TRUE) start_color();
 	 
+	 struct Mouse MOUSE;
 	 MEVENT event; // Mouse event
-	 int mouse_valid = 0;  // Flag to track if we have valid mouse data
 	 getmaxyx(stdscr, row, col);
 	 srand(time(NULL));
 	 
@@ -74,7 +79,7 @@ int main(int argc, char *argv[])
 	 init_pair(6, COLOR_WHITE, COLOR_RED);    // Red Segment
 	 init_pair(7, COLOR_WHITE, COLOR_GREEN);  // Green Segment
 	 
-	 for(int i=0; i<=col; i++) { for(int j=0; j<=row; j++) { mvprintw(i,j, " "); } }
+	 for(int i=0; i<=col; i++) { for(int j=0; j<=row; j++) { mvprintw(j,i, " "); } }
 	 
 	 struct timespec start, end;
 	 
@@ -83,6 +88,7 @@ int main(int argc, char *argv[])
 	 Bar.width=22;
 	 Bar.X=(col/2)-(Bar.width/2);
 	 Bar.Y=(row/2)-(Bar.height/2);
+	 memset(&Bar.include, '\0', sizeof(Bar.include));
 	 
 	 struct Segments segments[MAX_SEGMENTS];
 	 int segment_count=0;
@@ -99,13 +105,18 @@ int main(int argc, char *argv[])
 		else if(key==KEY_LEFT  || key=='a' || key==4) { Bar.X--; }
 		else if(key==KEY_DOWN  || key=='s' || key==2) { Bar.Y++; }
 		else if(key==KEY_UP    || key=='w' || key==3) { Bar.Y--; }
-		else if(key == KEY_MOUSE)
+		if(key == KEY_MOUSE)
 		{
 			if(getmouse(&event) == OK)
 			{
-				Bar.X = event.x - (Bar.width / 2);
-				Bar.Y = event.y - (Bar.height / 2);
-				mouse_valid = 1;  // Mark data as valid
+				MOUSE.X = event.x;
+				MOUSE.Y = event.y;
+				
+				if(isdebug) mvprintw(0, 0, "Mouse Event: x=%d, y=%d, bstate=%d", event.x, event.y, event.bstate);
+				
+				
+				Bar.X = MOUSE.X - (Bar.width / 2);
+				Bar.Y = MOUSE.Y - (Bar.height / 2);
 			}
 		}
 		
@@ -118,21 +129,21 @@ int main(int argc, char *argv[])
 		erase_bar(Bar.height, Bar.width, Bar.Y, Bar.X);
 		
 		
-		handle_segments(segments, &segment_count);
+		handle_segments(segments, &segment_count, &Bar);
 		
 		
 		draw_segments(segments, segment_count);
-		draw_bar(Bar.height, Bar.width, Bar.Y, Bar.X);
+		draw_bar(&Bar, Bar.height, Bar.width, Bar.Y, Bar.X);
 		
 		
 		if(isdebug)
 		{
-			mvprintw(0, 0, "Mouse: X=%d, Y=%d, Valid: %d", event.x, event.y, mouse_valid);
 			mvprintw(1, 0, "Bar: X=%d, Y=%d", Bar.X, Bar.Y);
+			mvprintw(2, 0, "Segments: %d", segment_count);
 		}
 		
 		refresh();
-		key='x';
+		if (key != KEY_MOUSE) key='x';
 		
 		clock_gettime(CLOCK_MONOTONIC, &end);
 		long delta_ns = (end.tv_sec - start.tv_sec) *1e9 + (end.tv_nsec - start.tv_nsec);
@@ -147,18 +158,18 @@ int main(int argc, char *argv[])
 	 }
 	 
 	 E:
-	 printf("\033[?1003l\n");
-	 fflush(stdout);
+//	 fflush(stdout);
 	 endwin();
+	 printf("Progressbar88, a game by Skywater, Kartopu and Kuftopagi, 2025\n\n");
 	 return(0);
 }
 
-void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_ptr)
+void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_ptr, struct BarStruct *Bar)
 {
 	int i, j, random, do_generate;
 	int segment_count = *segment_count_ptr;  // Get local copy of segment_count from pointer
 	
-	do_generate = rand()%30 + 1;
+	do_generate = rand()%40 + 1;
 	if(do_generate == 8 && segment_count < MAX_SEGMENTS)
 	{
 		int type;
@@ -172,12 +183,12 @@ void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_
 		if(random < 25) // Blue Segment
 		{
 			type = 1;
-			symbol = ' ';
+			symbol = '+';
 		}
 		else if(random >= 25 && random<50) // Yellow Segment
 		{
 			type = 3;
-			symbol = ' ';
+			symbol = 'n';
 		}
 		else if(random >= 50 && random<60) // Cyan Segment
 		{
@@ -216,25 +227,40 @@ void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_
 	
 	for(i = 0; i < segment_count ; i++)
 	{
+		int is_collided = 0;  // Initialize to 0
 		segments[i].y += segments[i].speed;
 		
-		if(1) // check for collision with bar
-		{
-			
-		}
+		// Convert segment positions to int for comparison
+		int seg_x = (int)segments[i].x;
+		int seg_y = (int)segments[i].y;
 		
-		if((int)segments[i].y > row - 1) // delete segment if it is out of screen
+		if(Bar->X <= seg_x && seg_x <= (Bar->X + Bar->width)) // check for X axis collision with bar
 		{
-			for(j = i; j < segment_count - 1; j++)
+			if(Bar->Y <= seg_y && seg_y <= (Bar->Y + Bar->height)) // check for Y axis collision with bar
 			{
-				segments[j] = segments[j+1];
+				is_collided = 1;
+				if(isdebug) mvprintw(3, 0, "Collision at: X:%d, Y:%d", seg_x, seg_y);
+				
+				int last_char = strlen(Bar->include);
+				Bar->include[last_char] = segments[i].symbol;
+				Bar->include[last_char + 1] = segments[i].symbol;
+				
 			}
-			segment_count -= 1;
-			i--;
-		}
+		
 	}
 	
-	*segment_count_ptr = segment_count;  // Update the original segment_count to pointer
+	if((int)segments[i].y > row - 1 || is_collided) // delete segment if it is out of screen or collided with bar
+	{
+		for(j = i; j < segment_count - 1; j++)
+		{
+			segments[j] = segments[j+1];
+			
+		}
+		segment_count -= 1;
+		i--;
+	}
+}
+*segment_count_ptr = segment_count;  // Update the original segment_count to pointer
 }
 void draw_segments(struct Segments segments[MAX_SEGMENTS], int segment_count)
 {
@@ -261,25 +287,33 @@ void erase_segments(struct Segments segments[MAX_SEGMENTS], int segment_count)
 		
 		attron(COLOR_PAIR(0));
 		mvprintw(y, x, " ");
-		attron(COLOR_PAIR(0));
+		attroff(COLOR_PAIR(0));
 
 	}
 }
 
-void draw_bar(int height, int width, int start_y, int start_x)
+void draw_bar(struct BarStruct *Bar, int height, int width, int start_y, int start_x)
 {
+	int i = 0;
 	bar=newwin(height, width, start_y, start_x);
 	box(bar, 0,0);
+	while(Bar->include[i] != '\0')
+	{
+		mvwprintw(bar, 1, 1, "%c", Bar->include[i]);
+		i++;
+	}
 	wrefresh(bar);
-	
 }
 
 void erase_bar(int height, int width, int start_y, int start_x)
 {
-	wclear(bar); wrefresh(bar);
-	delwin(bar);
-	bar=NULL;
-	refresh();
+	if(bar != NULL)
+	{
+		wclear(bar); 
+		wrefresh(bar);
+		delwin(bar);
+		bar = NULL;
+	}
 	
 }
 
@@ -287,6 +321,6 @@ void get_input()
 {
 	 int ch;
 	 ch=getch();
-	 
-	 if(ch!=ERR) { key=ch; }
+	 if(ch == KEY_MOUSE) key = KEY_MOUSE;
+	 else if(ch!=ERR) key=ch; 
 }
