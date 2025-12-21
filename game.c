@@ -25,7 +25,7 @@
 #define FRAME_DURATION_NS (1000000000 / TARGET_FPS)
 #define MAX_SEGMENTS 20
 
-int row, col, isdebug;
+int row, col, isdebug, round_end, system_failure;
 char key;
 WINDOW *bar;
 struct BarStruct{
@@ -233,18 +233,39 @@ void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_
 		// Convert segment positions to int for comparison
 		int seg_x = (int)segments[i].x;
 		int seg_y = (int)segments[i].y;
+		int filled_area = strlen(Bar->include);
 		
 		if(Bar->X <= seg_x && seg_x <= (Bar->X + Bar->width)) // check for X axis collision with bar
 		{
 			if(Bar->Y <= seg_y && seg_y <= (Bar->Y + Bar->height)) // check for Y axis collision with bar
 			{
-				is_collided = 1;
-				if(isdebug) mvprintw(3, 0, "Collision at: X:%d, Y:%d", seg_x, seg_y);
-				
-				int last_char = strlen(Bar->include);
-				Bar->include[last_char] = segments[i].symbol;
-				Bar->include[last_char + 1] = segments[i].symbol;
-				
+				if(seg_x < Bar->X + filled_area) { is_collided = 1; }
+				else
+				{
+					if(Bar->include[i] == 'W') // Green Segment: instant win
+					{
+						memset(Bar->include, '+', sizeof(Bar->include));
+						
+					}
+					else if(Bar->include[i] == '!') // Red Segment: system failure
+					{
+						system_failure = 1;
+					}
+					
+					filled_area = strlen(Bar->include);
+					if(filled_area >= MAX_SEGMENTS) // check if are is filled
+					{
+						round_end = 1;
+					}
+					else // add more segments until bar is filled
+					{
+						is_collided = 1;
+						if(isdebug) mvprintw(3, 0, "Collision at: X:%d, Y:%d", seg_x, seg_y);
+						
+						int last_char = strlen(Bar->include);
+						Bar->include[last_char] = segments[i].symbol;
+					}
+				}
 			}
 		
 	}
@@ -299,7 +320,36 @@ void draw_bar(struct BarStruct *Bar, int height, int width, int start_y, int sta
 	box(bar, 0,0);
 	while(Bar->include[i] != '\0')
 	{
-		mvwprintw(bar, 1, 1, "%c", Bar->include[i]);
+		switch(Bar->include[i])
+		{
+			case '+':
+				wattron(bar, COLOR_PAIR(1));
+				break;
+			case 'n':
+				wattron(bar, COLOR_PAIR(3));
+				break;
+			case 'X':
+				wattron(bar, COLOR_PAIR(2));
+				break;
+			case '-':
+				wattron(bar, COLOR_PAIR(4));
+				break;
+			case '0':
+				wattron(bar, COLOR_PAIR(5));
+				break;
+			case '!':
+				wattron(bar, COLOR_PAIR(6));
+				break;
+			case 'W':
+				wattron(bar, COLOR_PAIR(7));
+				break;
+			default:
+				wattron(bar, COLOR_PAIR(0));
+				break;
+		}
+		mvwprintw(bar, 1, i + 1, "%c", Bar->include[i]);
+		attron(COLOR_PAIR(0));
+		attroff(COLOR_PAIR(0));
 		i++;
 	}
 	wrefresh(bar);
@@ -321,6 +371,6 @@ void get_input()
 {
 	 int ch;
 	 ch=getch();
-	 if(ch == KEY_MOUSE) key = KEY_MOUSE;
+	 if(ch == KEY_MOUSE) key = 409;
 	 else if(ch!=ERR) key=ch; 
 }
