@@ -26,11 +26,11 @@
 #define MAX_SEGMENTS 20
 
 int row, col, isdebug, round_end, system_failure;
-char key;
+int key;
 WINDOW *bar;
 struct BarStruct{
 	int X, Y, height, width;
-	char include[BAR_FILL_COUNT];
+	char include[BAR_FILL_COUNT + 1]; // 1 more for NULL term
 };
 struct Segments{
 	int type;
@@ -42,6 +42,7 @@ struct Mouse{
 };
 
 void get_input();
+void menu();
 void draw_bar(struct BarStruct *Bar, int height, int width, int start_y, int start_x);
 void erase_bar(int height, int width, int start_y, int start_x);
 void draw_segments(struct Segments segments[MAX_SEGMENTS], int segment_count);
@@ -160,7 +161,7 @@ int main(int argc, char *argv[])
 	 E:
 //	 fflush(stdout);
 	 endwin();
-	 printf("Progressbar88, a game by Skywater, Kartopu and Kuftopagi, 2025\n\n");
+	 printf("Progressbar88, a game by Skywater, Kartopu, Kuftopagi and Limon 2025 - 2026\n\n");
 	 return(0);
 }
 
@@ -228,6 +229,8 @@ void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_
 	for(i = 0; i < segment_count ; i++)
 	{
 		int is_collided = 0;  // Initialize to 0
+		int del_last = 0;
+		int add_double = 0;
 		segments[i].y += segments[i].speed;
 		
 		// Convert segment positions to int for comparison
@@ -242,18 +245,32 @@ void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_
 				if(seg_x < Bar->X + filled_area) { is_collided = 1; }
 				else
 				{
-					if(Bar->include[i] == 'W') // Green Segment: instant win
+					if(segments[i].symbol == 'W') // Green Segment: instant win
 					{
-						memset(Bar->include, '+', sizeof(Bar->include));
+						memset(Bar->include, '\0', strlen(Bar->include));
+						memset(Bar->include, '+', MAX_SEGMENTS);
+						Bar->include[MAX_SEGMENTS + 1] = '\0';
 						
 					}
-					else if(Bar->include[i] == '!') // Red Segment: system failure
+					else if(segments[i].symbol == '!') // Red Segment: system failure
 					{
 						system_failure = 1;
 					}
+					else if(segments[i].symbol == '-') // Minus Segment: delete last segment from bar
+					{
+						del_last = 1;
+					}
+					else if(segments[i].symbol == 'X') // Double Segment: add two blue segments
+					{
+						add_double = 1;
+					}
+					else if(segments[i].symbol == '0') // Blank Segment: Add a blank segment
+					{
+						// NULL
+					}
 					
 					filled_area = strlen(Bar->include);
-					if(filled_area >= MAX_SEGMENTS) // check if are is filled
+					if(filled_area >= MAX_SEGMENTS) // check if bar is filled
 					{
 						round_end = 1;
 					}
@@ -263,11 +280,28 @@ void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_
 						if(isdebug) mvprintw(3, 0, "Collision at: X:%d, Y:%d", seg_x, seg_y);
 						
 						int last_char = strlen(Bar->include);
-						Bar->include[last_char] = segments[i].symbol;
+						if(del_last != 1) Bar->include[last_char] = segments[i].symbol; // Add char to bar
+
+						if(del_last == 1) // Delete last char
+						{
+							del_last = 0;
+							last_char = strlen(Bar->include) - 1;
+							if(last_char <= 1) Bar->include[last_char] = '\0';
+						}
+						else if (add_double == 1) // Add one more cyan
+						{
+							add_double = 0;
+							last_char = strlen(Bar->include) - 1;
+							Bar->include[last_char + 1] = 'X'; // FIX THIS SHIT
+							Bar->include[last_char + 2] = '\0';
+						}
 					}
+					if(filled_area >= MAX_SEGMENTS) // check if bar is filled
+					{ round_end = 1; }
 				}
 			}
-		
+	int last_char = strlen(Bar->include);
+	if(isdebug) mvprintw(4, 0, "Bar includes: %s  Total: %d  ", Bar->include, last_char);
 	}
 	
 	if((int)segments[i].y > row - 1 || is_collided) // delete segment if it is out of screen or collided with bar
@@ -364,6 +398,11 @@ void erase_bar(int height, int width, int start_y, int start_x)
 		delwin(bar);
 		bar = NULL;
 	}
+	
+}
+
+void menu()
+{
 	
 }
 
