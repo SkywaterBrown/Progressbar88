@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = -Wall -g
 LDLIBS = -lncurses
 
-game: game.c
+pb88: game.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDLIBS)
 
 update:
@@ -10,6 +10,6 @@ update:
 	curl -L -o Makefile https://raw.githubusercontent.com/SkywaterBrown/Progressbar88/main/Makefile
 
 clean:
-	rm -f game
+	rm -f pb88
 
 .PHONY: update clean
