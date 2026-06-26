@@ -25,6 +25,12 @@
 #define FRAME_DURATION_NS (1000000000 / TARGET_FPS)
 #define MAX_SEGMENTS 20
 
+struct Game{
+	char name[15];
+	char details[3][128];
+	char credits[61];
+};
+
 int row, col, isdebug, round_end, system_failure;
 int key;
 WINDOW *bar;
@@ -42,7 +48,8 @@ struct Mouse{
 };
 
 void get_input();
-void menu();
+void opening(struct Game game);
+void menu(struct Game game);
 void draw_bar(struct BarStruct *Bar, int height, int width, int start_y, int start_x);
 void erase_bar(int height, int width, int start_y, int start_x);
 void draw_segments(struct Segments segments[MAX_SEGMENTS], int segment_count);
@@ -52,6 +59,16 @@ void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_
 int main(int argc, char *argv[])
 {
 	 if(argc==2 && !strcmp(argv[1], "debug")) { isdebug=1; }
+	 
+	 struct Game game = {
+		 "Progressbar 88", // Name
+		 { // Detais ( line by line )
+			"A casual arcade game",
+			"Inspired from Progressbar 95 mobile game",
+			"Full screen is recomended"
+		 },	
+		 "a game by Skywater, Kartopu, Kuftopagi and Limon 2025 - 2026" // Credits
+	};
 	 
 //	 printf("\033[?1003h\n");
 //	 fflush(stdout);
@@ -64,7 +81,7 @@ int main(int argc, char *argv[])
 	 nodelay(stdscr, TRUE);
 	 mousemask(ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, NULL);
 	 mouseinterval(0);
-	 if(has_colors() == TRUE) start_color();
+	 if(has_colors() == TRUE) { start_color(); if (isdebug) mvprintw(1,20, "Has colors."); }
 	 
 	 struct Mouse MOUSE;
 	 MEVENT event; // Mouse event
@@ -94,18 +111,30 @@ int main(int argc, char *argv[])
 	 struct Segments segments[MAX_SEGMENTS];
 	 int segment_count=0;
 	 
+	 opening(game);
 	 
+	 round_end = 1; // First run
 	 while(1)
 	 {
+		if (round_end == 1) { round_end = 0; menu(game); }
+		 
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		 
 		get_input();
 		
 		if(key==27 || key=='q') { goto E; }
-		else if(key==KEY_RIGHT || key=='d' || key==5) { Bar.X++; }
-		else if(key==KEY_LEFT  || key=='a' || key==4) { Bar.X--; }
-		else if(key==KEY_DOWN  || key=='s' || key==2) { Bar.Y++; }
-		else if(key==KEY_UP    || key=='w' || key==3) { Bar.Y--; }
+		else if(key == KEY_RIGHT || key == 'd' || key == 5) { Bar.X++; }
+		else if(key == KEY_LEFT  || key == 'a' || key == 4) { Bar.X--; }
+		else if(key == KEY_DOWN  || key == 's' || key == 2) { Bar.Y++; }
+		else if(key == KEY_UP    || key == 'w' || key == 3) { Bar.Y--; }
+		
+		else if (key == 'p') // pause the game untill any key is pressed
+		{
+			nodelay(stdscr, FALSE);
+			getch();
+			nodelay(stdscr, TRUE);
+		}
+		
 		if(key == KEY_MOUSE)
 		{
 			if(getmouse(&event) == OK)
@@ -161,7 +190,7 @@ int main(int argc, char *argv[])
 	 E:
 //	 fflush(stdout);
 	 endwin();
-	 printf("Progressbar88, a game by Skywater, Kartopu, Kuftopagi and Limon 2025 - 2026\n\n");
+	 printf("%s, %s\n\n",game.name, game.credits);
 	 return(0);
 }
 
@@ -401,7 +430,41 @@ void erase_bar(int height, int width, int start_y, int start_x)
 	
 }
 
-void menu()
+void opening(struct Game game)
+{
+	int n;
+	int one_o_third_y = row / 3;
+	int one_o_forth_y = row / 4;
+	
+	// Right now I am making this over enginered, but I like to do so, hehehe...
+	int str_len[16]; // I think 16 is unecessary but who cares
+	int max_lines_det = sizeof(game.details) / sizeof(game.details[0]);
+	
+	str_len[0] = strlen(game.name);
+	
+	for(n = 0; n < max_lines_det; n++)
+		str_len[n + 1] = strlen(game.details[n]);
+	
+	str_len[max_lines_det + 1] = strlen(game.credits);
+	
+	// Implement menu border logic here, it'll consider longest string's lenght
+	
+	mvprintw(one_o_third_y + 0, (col/2) - (strlen(game.name) / 2), "%s", game.name);
+	
+	for(n = 0; n < max_lines_det; n++)
+		mvprintw(one_o_third_y + 3 + n, (col/2) - (strlen(game.details[n]) / 2), "%s", game.details[n]);
+	
+	mvprintw(one_o_third_y + 4 + n, (col/2) - (strlen(game.credits) / 2), "%s", game.credits);
+	mvprintw(one_o_third_y + 10, (col/2) - (strlen("Press any key to contiune...") / 2), "Press any key to contiune...");
+	
+	nodelay(stdscr, FALSE);
+	getch();
+	nodelay(stdscr, TRUE);
+	
+	clear();
+}
+
+void menu(struct Game game)
 {
 	
 }
