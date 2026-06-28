@@ -4,8 +4,8 @@
 -----------------------------------------------------
 | Number |  Name  | Symbol | Probablity |   Score   |
 -----------------------------------------------------
-|   1    | Blue   |  '+'   |    %25     |     +%10  |
-|   2    | Cyan   |  'X'   |    %10     | 2 * +%10  |
+|   1    | Blue   |  '+'   |    %25     |     +%5   |
+|   2    | Cyan   |  'X'   |    %10     |     +%5   |
 |   3    | Yellow |  'n'   |    %25     |     -%5   |
 |   4    | Pink   |  '-'   |    %15     |      %0   |
 |   5    | Gray   |  '0'   |    %15     |      %0   |
@@ -24,9 +24,9 @@ Making this table was painful, 'cuz it is HANDMADE.
 #include <string.h>
 #include <time.h>
 
-#define BAR_FILL_COUNT 20
 #define TARGET_FPS 60
 #define FRAME_DURATION_NS (1000000000 / TARGET_FPS)
+#define BAR_FILL_COUNT 20 // amount of maximum segments bar can contain
 #define MAX_SEGMENTS 20 // amount of maximum segments that can exist in one moment (excpet the ones in the bar)
 
 struct Game{
@@ -39,6 +39,7 @@ int row, col, isdebug, round_end, system_failure, godly;
 int key;
 WINDOW *bar;
 WINDOW *menu_window;
+
 
 struct BarStruct{
 	int X, Y, height, width;
@@ -56,6 +57,8 @@ struct Mouse{
 void get_input();
 void opening(struct Game game);
 void menu(struct Game game, struct BarStruct *bar);
+void pause_game();
+void reset_variables(struct Segments segments[MAX_SEGMENTS], int segment_count, struct BarStruct *bar);
 void draw_bar(struct BarStruct *Bar, int height, int width, int start_y, int start_x);
 void erase_bar(int height, int width, int start_y, int start_x);
 void draw_segments(struct Segments segments[MAX_SEGMENTS], int segment_count);
@@ -76,10 +79,7 @@ int main(int argc, char *argv[])
 		 },	
 		 "a game by Skywater, Kartopu, Kuftopagi and Limon 2025 - 2026" // Credits
 	};
-	 
-//	 printf("\033[?1003h\n");
-//	 fflush(stdout);
-	 
+	  
 	 initscr();
 	 cbreak();
 	 noecho();
@@ -95,18 +95,38 @@ int main(int argc, char *argv[])
 	 getmaxyx(stdscr, row, col);
 	 srand(time(NULL));
 	 
+	if(has_colors())
+	{
+		if(can_change_color())
+		{
+			init_color(COLOR_BLACK, 0, 0, 0);
+			init_color(COLOR_RED, 1000, 0, 0);
+			init_color(COLOR_GREEN, 0, 1000, 0);
+			init_color(COLOR_YELLOW, 1000, 1000, 0);
+			init_color(COLOR_BLUE, 0 ,0, 1000);
+			init_color(COLOR_MAGENTA, 1000, 0, 1000);
+			init_color(COLOR_CYAN, 0, 1000, 1000);
+			init_color(COLOR_WHITE, 1000, 1000, 1000);
+		}
+		
+		init_pair(0, COLOR_WHITE, COLOR_BLACK);  // Default
+		init_pair(1, COLOR_WHITE, COLOR_BLUE);   // Blue Segment
+		init_pair(2, COLOR_WHITE, COLOR_CYAN);   // Cyan Segment
+		init_pair(3, COLOR_WHITE, COLOR_YELLOW); // Yellow Segment
+		init_pair(4, COLOR_WHITE, COLOR_MAGENTA);// Pink Segment
+		init_pair(5, COLOR_BLACK, COLOR_WHITE);  // Gray Segment
+		init_pair(6, COLOR_WHITE, COLOR_RED);    // Red Segment
+		init_pair(7, COLOR_WHITE, COLOR_GREEN);  // Green Segment
+		init_pair(8, COLOR_BLACK, COLOR_GREEN);  // Godly Mode Color
+		attron(COLOR_PAIR(0));
+	}
+	else // No color support? Black & White then...
+	{
+		for(int abcdef = 0; abcdef <= 8; abcdef++)
+			init_pair(abcdef, COLOR_WHITE, COLOR_BLACK);
+	}
 	 
-	 init_pair(0, COLOR_WHITE, COLOR_BLACK); attron(COLOR_PAIR(0));
-	 init_pair(1, COLOR_WHITE, COLOR_BLUE);   // Blue Segment
-	 init_pair(2, COLOR_WHITE, COLOR_CYAN);   // Cyan Segment
-	 init_pair(3, COLOR_WHITE, COLOR_YELLOW); // Yellow Segment
-	 init_pair(4, COLOR_WHITE, COLOR_MAGENTA);// Pink Segment
-	 init_pair(5, COLOR_BLACK, COLOR_WHITE);  // Gray Segment
-	 init_pair(6, COLOR_WHITE, COLOR_RED);    // Red Segment
-	 init_pair(7, COLOR_WHITE, COLOR_GREEN);  // Green Segment
-	 init_pair(8, COLOR_BLACK, COLOR_GREEN);  // Godly Mode Color
-	 
-	 for(int i=0; i<=col; i++) { for(int j=0; j<=row; j++) { mvprintw(j,i, " "); } } // idk why i made it this way... LOL
+	 clear();
 	 
 	 struct timespec start, end;
 	 
@@ -124,7 +144,7 @@ int main(int argc, char *argv[])
 	 
 	 while(1)
 	 {
-		 
+		key = 0;
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		 
 		get_input();
@@ -136,16 +156,15 @@ int main(int argc, char *argv[])
 		else if(key == KEY_UP    || key == 'w' || key == 3) { Bar.Y--; }
 		
 		else if (key == 'p') // pause the game untill any key is pressed
-		{
-			nodelay(stdscr, FALSE);
-			getch();
-			nodelay(stdscr, TRUE);
-		}
+			pause_game();
 		
 		if(key == KEY_MOUSE)
 		{
 			if(getmouse(&event) == OK)
 			{
+				if (event.bstate & BUTTON3_PRESSED) // pause the game if right mouse key is pressed
+					pause_game();
+				
 				MOUSE.X = event.x;
 				MOUSE.Y = event.y;
 				
@@ -194,11 +213,14 @@ int main(int argc, char *argv[])
 		}
 		
 		
-		if (round_end == 1) { round_end = 0; menu(game, &Bar); }
+		if (round_end == 1) 
+		{
+			round_end = 0;
+			menu(game, &Bar); }
+			reset_variables(segments, segment_count, &Bar); // LAST PART TO HANDLE
 	 }
 	 
 	 E:
-//	 fflush(stdout);
 	 endwin();
 	 printf("%s, %s\n\n",game.name, game.credits);
 	 return(0);
@@ -267,6 +289,8 @@ void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_
 	
 	for(i = 0; i < segment_count ; i++)
 	{
+		int last_char;
+		last_char = strlen(Bar->include);
 		int is_collided = 0;  // Initialize to 0
 		int del_last = 0;
 		int add_double = 0;
@@ -287,9 +311,8 @@ void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_
 				{
 					if(segments[i].symbol == 'W') // Green Segment: instant win
 					{
-						memset(Bar->include, '\0', strlen(Bar->include));
-						memset(Bar->include, '+', MAX_SEGMENTS);
-						Bar->include[MAX_SEGMENTS + 1] = '\0';
+						memset(Bar->include, 'W', BAR_FILL_COUNT);
+						Bar->include[BAR_FILL_COUNT] = '\0';
 						
 						godly = 1;
 						
@@ -312,7 +335,7 @@ void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_
 					}
 					
 					filled_area = strlen(Bar->include);
-					if(filled_area >= MAX_SEGMENTS) // check if bar is filled
+					if(filled_area >= BAR_FILL_COUNT) // check if bar is filled
 					{
 						round_end = 1;
 					}
@@ -321,28 +344,35 @@ void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_
 						is_collided = 1;
 						if(isdebug) mvprintw(3, 0, "Collision at: X:%d, Y:%d", seg_x, seg_y);
 						
-						int last_char = strlen(Bar->include);
-						if(del_last != 1) Bar->include[last_char] = segments[i].symbol; // Add char to bar
-
+						last_char = strlen(Bar->include);
+						if(del_last != 1)
+						{
+							Bar->include[last_char] = segments[i].symbol;
+							Bar->include[last_char + 1] = '\0';
+						} // Add char to bar
+						
 						if(del_last == 1) // Delete last char
 						{
 							del_last = 0;
 							last_char = strlen(Bar->include) - 1;
-							if(last_char <= 1) Bar->include[last_char] = '\0';
+							if(last_char >= 0) Bar->include[last_char] = '\0';
 						}
-						else if (add_double == 1) // Add one more cyan
+						else if (add_double == 1) // Add one MORE cyan
 						{
 							add_double = 0;
 							last_char = strlen(Bar->include) - 1;
-							Bar->include[last_char + 1] = 'X'; // FIX THIS SHIT
-							Bar->include[last_char + 2] = '\0';
+							filled_area = strlen(Bar->include);
+							if(filled_area <= BAR_FILL_COUNT){
+								Bar->include[last_char + 1] = 'X';
+								if(filled_area <= BAR_FILL_COUNT)
+									Bar->include[last_char + 2] = '\0';
+							}
 						}
 					}
-					if(filled_area >= MAX_SEGMENTS) // check if bar is filled
+					if(filled_area >= BAR_FILL_COUNT) // check if bar is filled
 					{ round_end = 1; }
 				}
 			}
-	int last_char = strlen(Bar->include);
 	if(isdebug) mvprintw(4, 0, "Bar includes: %s  Total: %d  ", Bar->include, last_char);
 	}
 	
@@ -356,6 +386,8 @@ void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_
 		segment_count -= 1;
 		i--;
 	}
+	if(filled_area >= BAR_FILL_COUNT) // check if bar is filled
+		{ round_end = 1; }
 }
 *segment_count_ptr = segment_count;  // Update the original segment_count to pointer
 }
@@ -392,10 +424,18 @@ void erase_segments(struct Segments segments[MAX_SEGMENTS], int segment_count)
 void draw_bar(struct BarStruct *Bar, int height, int width, int start_y, int start_x)
 {
 	int i = 0;
+	
+	if(bar != NULL)
+	{
+		wclear(bar);
+		wrefresh(bar);
+		delwin(bar);
+	}
+	
 	bar=newwin(height, width, start_y, start_x);
-	if(godly == 1) wattron(bar, COLOR_PAIR(8)); // Godly Bar
+	if(godly == 1) { wattron(bar, COLOR_PAIR(8));} // Godly Bar
 	box(bar, 0,0);
-	while(Bar->include[i] != '\0')
+	while(i < BAR_FILL_COUNT)
 	{
 		switch(Bar->include[i])
 		{
@@ -424,12 +464,13 @@ void draw_bar(struct BarStruct *Bar, int height, int width, int start_y, int sta
 				wattron(bar, COLOR_PAIR(0));
 				break;
 		}
-		if(godly == 1) wattron(bar, COLOR_PAIR(8)); // Godly Bar
+		if(godly == 1) { wattron(bar, COLOR_PAIR(8));} // Godly Bar
 		mvwprintw(bar, 1, i + 1, "%c", Bar->include[i]);
 		attron(COLOR_PAIR(0));
 		attroff(COLOR_PAIR(0));
 		i++;
 	}
+	if(godly == 1) godly = 0;
 	wrefresh(bar);
 }
 
@@ -468,7 +509,7 @@ void opening(struct Game game)
 		mvprintw(one_o_third_y + 3 + n, (col/2) - (strlen(game.details[n]) / 2), "%s", game.details[n]);
 	
 	mvprintw(one_o_third_y + 4 + n, (col/2) - (strlen(game.credits) / 2), "%s", game.credits);
-	mvprintw(one_o_third_y + 10, (col/2) - (strlen("Press any key to contiune...") / 2), "Press any key to contiune...");
+	mvprintw(one_o_third_y + 10, (col/2) - (strlen("Press any key to continue...") / 2), "Press any key to continue...");
 	
 	nodelay(stdscr, FALSE);
 	getch();
@@ -482,9 +523,10 @@ void menu(struct Game game, struct BarStruct *Bar)
 	int height, width, start_y, start_x;
 	char text[12] = "You scored:";
 	int score = calculate_score(Bar);
-	char score_text[5];
+	char score_text[16];
 	
-	snprintf(score_text, 5,"%%%d", score);
+	erase_bar(Bar->height, Bar->width, Bar->Y, Bar->X);
+	snprintf(score_text, sizeof(score_text),"%%%d", score);
 	
 	height  = row / 2;
 	width   = col / 2;
@@ -507,10 +549,14 @@ void menu(struct Game game, struct BarStruct *Bar)
 	
 	draw_bar(Bar, Bar->height, Bar->width, start_y + 3, start_x + width / 2 - Bar->width / 2); // Draw the bar after creating menu window to avoid collision
 	
+	flushinp(); // clear all pending inputs
 	
 	nodelay(stdscr, FALSE);
 	nodelay(menu_window, FALSE);
-	getch();
+	
+	int ch = getch();
+	key = ch;
+	
 	nodelay(stdscr, TRUE);
 	nodelay(menu_window, TRUE);
 	
@@ -518,6 +564,12 @@ void menu(struct Game game, struct BarStruct *Bar)
 	wrefresh(menu_window);
 	delwin(menu_window);
 	menu_window = NULL;
+	
+}
+
+void reset_variables(struct Segments segments[MAX_SEGMENTS], int segment_count, struct BarStruct *bar)
+{
+	
 }
 
 int calculate_score(struct BarStruct *Bar)
@@ -526,8 +578,8 @@ int calculate_score(struct BarStruct *Bar)
 	
 	while(Bar->include[i] != '\0')
 	{
-		if(Bar->include[i] == '+') score += 10; // Blue segment
-		else if(Bar->include[i] == 'X') score += 20; // Cyan segment
+		if(Bar->include[i] == '+') score += 5; // Blue segment
+		else if(Bar->include[i] == 'X') score += 5; // Cyan segment
 		else if(Bar->include[i] == 'n') score -= 5; // Yellow segment
 		else if(Bar->include[i] == '!') score -= 100; // Red segment
 		else if(Bar->include[i] == 'W') score += 100; // Green segment
@@ -538,10 +590,20 @@ int calculate_score(struct BarStruct *Bar)
 	return(score);
 }
 
+void pause_game()
+{
+	flushinp();
+	nodelay(stdscr, FALSE);
+	getch();
+	nodelay(stdscr, TRUE);
+}
+
 void get_input()
 {
-	 int ch;
-	 ch=getch();
-	 if(ch == KEY_MOUSE) key = 409;
-	 else if(ch!=ERR) key=ch; 
+	int ch;
+	ch=getch();
+	if(ch == ERR) key = 0;
+	if(ch == KEY_MOUSE) key = KEY_MOUSE;
+	else if(ch!=ERR) key=ch;
 }
+
