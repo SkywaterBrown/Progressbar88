@@ -1,16 +1,20 @@
 /*
-===================
-    SEGMENTS
-===================
-1 - Blue   '+'  -  %25
-2 - Cyan   'X'  -  %10
-3 - Yellow 'n'  -  %25
-4 - Pink   '-'  -  %15
-5 - Gray   '0'  -  %15
-6 - Red    '!'  -  %8
-7 - Green  'W'  -  %2
+-----------------------------------------------------
+|                   SEGMENTS                        |
+-----------------------------------------------------
+| Number |  Name  | Symbol | Probablity |   Score   |
+-----------------------------------------------------
+|   1    | Blue   |  '+'   |    %25     |     +%10  |
+|   2    | Cyan   |  'X'   |    %10     | 2 * +%10  |
+|   3    | Yellow |  'n'   |    %25     |     -%5   |
+|   4    | Pink   |  '-'   |    %15     |      %0   |
+|   5    | Gray   |  '0'   |    %15     |      %0   |
+|   6    | Red    |  '!'   |    %8      |     -%100 |
+|   7    | Green  |  'W'   |    %2      |     +%100 |
+-----------------------------------------------------
 
-===================
+Making this table was painful, 'cuz it is HANDMADE.
+
 */
 
 #include <stdio.h>
@@ -23,7 +27,7 @@
 #define BAR_FILL_COUNT 20
 #define TARGET_FPS 60
 #define FRAME_DURATION_NS (1000000000 / TARGET_FPS)
-#define MAX_SEGMENTS 20
+#define MAX_SEGMENTS 20 // amount of maximum segments that can exist in one moment (excpet the ones in the bar)
 
 struct Game{
 	char name[15];
@@ -31,9 +35,11 @@ struct Game{
 	char credits[61];
 };
 
-int row, col, isdebug, round_end, system_failure;
+int row, col, isdebug, round_end, system_failure, godly;
 int key;
 WINDOW *bar;
+WINDOW *menu_window;
+
 struct BarStruct{
 	int X, Y, height, width;
 	char include[BAR_FILL_COUNT + 1]; // 1 more for NULL term
@@ -49,12 +55,13 @@ struct Mouse{
 
 void get_input();
 void opening(struct Game game);
-void menu(struct Game game);
+void menu(struct Game game, struct BarStruct *bar);
 void draw_bar(struct BarStruct *Bar, int height, int width, int start_y, int start_x);
 void erase_bar(int height, int width, int start_y, int start_x);
 void draw_segments(struct Segments segments[MAX_SEGMENTS], int segment_count);
 void erase_segments(struct Segments segments[MAX_SEGMENTS], int segment_count);
 void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_ptr, struct BarStruct *Bar);
+int calculate_score(struct BarStruct *Bar);
 
 int main(int argc, char *argv[])
 {
@@ -88,16 +95,18 @@ int main(int argc, char *argv[])
 	 getmaxyx(stdscr, row, col);
 	 srand(time(NULL));
 	 
+	 
 	 init_pair(0, COLOR_WHITE, COLOR_BLACK); attron(COLOR_PAIR(0));
 	 init_pair(1, COLOR_WHITE, COLOR_BLUE);   // Blue Segment
 	 init_pair(2, COLOR_WHITE, COLOR_CYAN);   // Cyan Segment
 	 init_pair(3, COLOR_WHITE, COLOR_YELLOW); // Yellow Segment
-	 init_pair(4, COLOR_WHITE, COLOR_MAGENTA);   // Pink Segment
-	 init_pair(5, COLOR_BLACK, COLOR_WHITE);   // Gray Segment
+	 init_pair(4, COLOR_WHITE, COLOR_MAGENTA);// Pink Segment
+	 init_pair(5, COLOR_BLACK, COLOR_WHITE);  // Gray Segment
 	 init_pair(6, COLOR_WHITE, COLOR_RED);    // Red Segment
 	 init_pair(7, COLOR_WHITE, COLOR_GREEN);  // Green Segment
+	 init_pair(8, COLOR_BLACK, COLOR_GREEN);  // Godly Mode Color
 	 
-	 for(int i=0; i<=col; i++) { for(int j=0; j<=row; j++) { mvprintw(j,i, " "); } }
+	 for(int i=0; i<=col; i++) { for(int j=0; j<=row; j++) { mvprintw(j,i, " "); } } // idk why i made it this way... LOL
 	 
 	 struct timespec start, end;
 	 
@@ -113,10 +122,8 @@ int main(int argc, char *argv[])
 	 
 	 opening(game);
 	 
-	 round_end = 1; // First run
 	 while(1)
 	 {
-		if (round_end == 1) { round_end = 0; menu(game); }
 		 
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		 
@@ -152,8 +159,8 @@ int main(int argc, char *argv[])
 		
 		if (Bar.Y < 0) { Bar.Y=0; }
 		else if (Bar.Y > row-Bar.height) { Bar.Y=row-Bar.height; }
-		if (Bar.X < 0) { Bar.X=0; }
-		else if (Bar.X > col-Bar.width) { Bar.X=col-Bar.width; }
+		if (Bar.X < Bar.width / -2) { Bar.X = Bar.width / -2; }
+		else if (Bar.X > col- Bar.width / 2) { Bar.X=col - Bar.width / 2; }
 		        
 		erase_segments(segments, segment_count);
 		erase_bar(Bar.height, Bar.width, Bar.Y, Bar.X);
@@ -185,6 +192,9 @@ int main(int argc, char *argv[])
 			sleep_time.tv_nsec = sleep_ns % 1000000000;
 			nanosleep(&sleep_time, NULL);
 		}
+		
+		
+		if (round_end == 1) { round_end = 0; menu(game, &Bar); }
 	 }
 	 
 	 E:
@@ -260,6 +270,7 @@ void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_
 		int is_collided = 0;  // Initialize to 0
 		int del_last = 0;
 		int add_double = 0;
+		godly = 0;
 		segments[i].y += segments[i].speed;
 		
 		// Convert segment positions to int for comparison
@@ -280,10 +291,12 @@ void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_
 						memset(Bar->include, '+', MAX_SEGMENTS);
 						Bar->include[MAX_SEGMENTS + 1] = '\0';
 						
+						godly = 1;
+						
 					}
 					else if(segments[i].symbol == '!') // Red Segment: system failure
 					{
-						system_failure = 1;
+						system_failure = 1; round_end = 1;
 					}
 					else if(segments[i].symbol == '-') // Minus Segment: delete last segment from bar
 					{
@@ -380,6 +393,7 @@ void draw_bar(struct BarStruct *Bar, int height, int width, int start_y, int sta
 {
 	int i = 0;
 	bar=newwin(height, width, start_y, start_x);
+	if(godly == 1) wattron(bar, COLOR_PAIR(8)); // Godly Bar
 	box(bar, 0,0);
 	while(Bar->include[i] != '\0')
 	{
@@ -410,6 +424,7 @@ void draw_bar(struct BarStruct *Bar, int height, int width, int start_y, int sta
 				wattron(bar, COLOR_PAIR(0));
 				break;
 		}
+		if(godly == 1) wattron(bar, COLOR_PAIR(8)); // Godly Bar
 		mvwprintw(bar, 1, i + 1, "%c", Bar->include[i]);
 		attron(COLOR_PAIR(0));
 		attroff(COLOR_PAIR(0));
@@ -434,7 +449,6 @@ void opening(struct Game game)
 {
 	int n;
 	int one_o_third_y = row / 3;
-	int one_o_forth_y = row / 4;
 	
 	// Right now I am making this over enginered, but I like to do so, hehehe...
 	int str_len[16]; // I think 16 is unecessary but who cares
@@ -447,7 +461,6 @@ void opening(struct Game game)
 	
 	str_len[max_lines_det + 1] = strlen(game.credits);
 	
-	// Implement menu border logic here, it'll consider longest string's lenght
 	
 	mvprintw(one_o_third_y + 0, (col/2) - (strlen(game.name) / 2), "%s", game.name);
 	
@@ -464,9 +477,65 @@ void opening(struct Game game)
 	clear();
 }
 
-void menu(struct Game game)
+void menu(struct Game game, struct BarStruct *Bar)
 {
+	int height, width, start_y, start_x;
+	char text[12] = "You scored:";
+	int score = calculate_score(Bar);
+	char score_text[5];
 	
+	snprintf(score_text, 5,"%%%d", score);
+	
+	height  = row / 2;
+	width   = col / 2;
+	start_y = row / 4;
+	start_x = col / 4;
+	
+	clear();
+	refresh();
+	
+	menu_window = newwin(height, width, start_y, start_x);
+	box(menu_window, 0,0);
+	
+	int name_len = strlen(game.name);
+	int text_len = strlen(text);
+	int score_len = strlen(score_text);
+	mvwprintw(menu_window, 1, (width / 2) - (name_len / 2), "%s", game.name);
+	mvwprintw(menu_window, 7, (width / 2) - (text_len / 2),"%s", text);
+	mvwprintw(menu_window, 8, (width / 2) - (score_len) / 2,"%s", score_text);
+	wrefresh(menu_window);
+	
+	draw_bar(Bar, Bar->height, Bar->width, start_y + 3, start_x + width / 2 - Bar->width / 2); // Draw the bar after creating menu window to avoid collision
+	
+	
+	nodelay(stdscr, FALSE);
+	nodelay(menu_window, FALSE);
+	getch();
+	nodelay(stdscr, TRUE);
+	nodelay(menu_window, TRUE);
+	
+	wclear(menu_window);
+	wrefresh(menu_window);
+	delwin(menu_window);
+	menu_window = NULL;
+}
+
+int calculate_score(struct BarStruct *Bar)
+{
+	int i = 0, score = 0;
+	
+	while(Bar->include[i] != '\0')
+	{
+		if(Bar->include[i] == '+') score += 10; // Blue segment
+		else if(Bar->include[i] == 'X') score += 20; // Cyan segment
+		else if(Bar->include[i] == 'n') score -= 5; // Yellow segment
+		else if(Bar->include[i] == '!') score -= 100; // Red segment
+		else if(Bar->include[i] == 'W') score += 100; // Green segment
+		else;
+		
+		i++;
+	}
+	return(score);
 }
 
 void get_input()
