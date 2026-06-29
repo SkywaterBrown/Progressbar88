@@ -58,7 +58,7 @@ void get_input();
 void opening(struct Game game);
 void menu(struct Game game, struct BarStruct *bar);
 void pause_game();
-void reset_variables(struct Segments segments[MAX_SEGMENTS], int segment_count, struct BarStruct *bar);
+void reset_variables(struct Segments segments[MAX_SEGMENTS], int *segment_count_ptr, struct BarStruct *bar);
 void draw_bar(struct BarStruct *Bar, int height, int width, int start_y, int start_x);
 void erase_bar(int height, int width, int start_y, int start_x);
 void draw_segments(struct Segments segments[MAX_SEGMENTS], int segment_count);
@@ -80,20 +80,20 @@ int main(int argc, char *argv[])
 		 "a game by Skywater, Kartopu, Kuftopagi and Limon 2025 - 2026" // Credits
 	};
 	  
-	 initscr();
-	 cbreak();
-	 noecho();
-	 curs_set(0);
-	 keypad(stdscr, TRUE);
-	 nodelay(stdscr, TRUE);
-	 mousemask(ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, NULL);
-	 mouseinterval(0);
-	 if(has_colors() == TRUE) { start_color(); if (isdebug) mvprintw(1,20, "Has colors."); }
-	 
-	 struct Mouse MOUSE;
-	 MEVENT event; // Mouse event
-	 getmaxyx(stdscr, row, col);
-	 srand(time(NULL));
+	initscr();
+	cbreak();
+	noecho();
+	curs_set(0);
+	keypad(stdscr, TRUE);
+	nodelay(stdscr, TRUE);
+	mousemask(ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, NULL);
+	mouseinterval(0);
+	if(has_colors() == TRUE) { start_color(); if (isdebug) mvprintw(1,20, "Has colors."); }
+	
+	struct Mouse MOUSE;
+	MEVENT event; // Mouse event
+	getmaxyx(stdscr, row, col);
+	srand(time(NULL));
 	 
 	if(has_colors())
 	{
@@ -126,24 +126,25 @@ int main(int argc, char *argv[])
 			init_pair(abcdef, COLOR_WHITE, COLOR_BLACK);
 	}
 	 
-	 clear();
-	 
-	 struct timespec start, end;
-	 
-	 struct BarStruct Bar;
-	 Bar.height=3;
-	 Bar.width=22;
-	 Bar.X=(col/2)-(Bar.width/2);
-	 Bar.Y=(row/2)-(Bar.height/2);
-	 memset(&Bar.include, '\0', sizeof(Bar.include));
-	 
-	 struct Segments segments[MAX_SEGMENTS];
-	 int segment_count=0;
-	 
-	 opening(game);
-	 
-	 while(1)
-	 {
+	clear();
+	
+	struct timespec start, end;
+	
+	struct BarStruct Bar;
+	Bar.height=3;
+	Bar.width=22;
+	Bar.X=(col/2)-(Bar.width/2);
+	Bar.Y=(row/2)-(Bar.height/2);
+	memset(&Bar.include, '\0', sizeof(Bar.include));
+	
+	struct Segments segments[MAX_SEGMENTS];
+	int segment_count=0;
+	
+	opening(game);
+	round_end = 0;
+	
+	while(1)
+	{
 		key = 0;
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		 
@@ -178,7 +179,7 @@ int main(int argc, char *argv[])
 		
 		if (Bar.Y < 0) { Bar.Y=0; }
 		else if (Bar.Y > row-Bar.height) { Bar.Y=row-Bar.height; }
-		if (Bar.X < Bar.width / -2) { Bar.X = Bar.width / -2; }
+		if (Bar.X < 0) { Bar.X = 0; } // FUCK NCURSES (GO TO LINE 456 TO SEE WHY)
 		else if (Bar.X > col- Bar.width / 2) { Bar.X=col - Bar.width / 2; }
 		        
 		erase_segments(segments, segment_count);
@@ -216,9 +217,10 @@ int main(int argc, char *argv[])
 		if (round_end == 1) 
 		{
 			round_end = 0;
-			menu(game, &Bar); }
-			reset_variables(segments, segment_count, &Bar); // LAST PART TO HANDLE
-	 }
+			menu(game, &Bar);
+			reset_variables(segments, &segment_count, &Bar);
+		}
+	}
 	 
 	 E:
 	 endwin();
@@ -232,7 +234,7 @@ void handle_segments(struct Segments segments[MAX_SEGMENTS], int *segment_count_
 	int segment_count = *segment_count_ptr;  // Get local copy of segment_count from pointer
 	
 	do_generate = rand()%40 + 1;
-	if(do_generate == 8 && segment_count < MAX_SEGMENTS)
+	if(do_generate == 8 && segment_count < MAX_SEGMENTS) // generate a segment with 1/40 posibility
 	{
 		int type;
 		double x, y, speed;
@@ -433,8 +435,29 @@ void draw_bar(struct BarStruct *Bar, int height, int width, int start_y, int sta
 	}
 	
 	bar=newwin(height, width, start_y, start_x);
-	if(godly == 1) { wattron(bar, COLOR_PAIR(8));} // Godly Bar
-	box(bar, 0,0);
+	if(godly == 1) { wattron(bar, COLOR_PAIR(8)); attron(COLOR_PAIR(8));} // Godly Bar
+	
+	if( box(bar, 0,0) ) { }
+// 	else // handling the bar borders if Bar.x < 0 
+// 	{
+// 		
+// 		char h_edge = 196;
+// 		char right_top_corner = 191;
+// 		char right_bot_corner = 217;
+// 		
+// 		int start_x = Bar->width - strlen(Bar->include);
+// 		int n_times = Bar->width - start_x;
+// 		
+// 		mvwhline(bar, 0, start_x, h_edge, n_times); // in order to find this function I dive deep into the ncurses library files...  No, actually I was bored, so I decided to do so. LOL
+// 		mvwhline(bar, Bar->height, start_x, h_edge, n_times);
+// 		mvwprintw(bar, 0, Bar->width, "%s", &right_top_corner);
+// 		mvwprintw(bar, Bar->height, Bar->width, "%s", &right_bot_corner);
+// 	}
+// I DECIDED NOT TO HANDLE THIS.
+// SINCE NCURSES DOES NOT LET ME CREATE A WINDOW BEYOND LEFT EDGE OF THE SCREEN (ex: start_x = -5),
+// I DECIDED TO MAKE IT IMPOSIBLE TO GO BEYOND LEFT EDGE FOR BAR_FILL_COUNT
+// 'CUZ I HAVE OTHER STUFF TO DO AND I DO NOT WANT TO SPEND MORE TIME ON THIS PROJECT 
+	
 	while(i < BAR_FILL_COUNT)
 	{
 		switch(Bar->include[i])
@@ -567,8 +590,32 @@ void menu(struct Game game, struct BarStruct *Bar)
 	
 }
 
-void reset_variables(struct Segments segments[MAX_SEGMENTS], int segment_count, struct BarStruct *bar)
+void reset_variables(struct Segments segments[MAX_SEGMENTS], int *segment_count_ptr, struct BarStruct *Bar)
 {
+	int i;
+	
+	system_failure = 0; // reset global variables
+	godly = 0;
+	
+	memset(Bar->include, '\0', sizeof(Bar->include)); // reset bar
+	Bar->X=(col/2)-(Bar->width/2);
+	Bar->Y=(row/2)-(Bar->height/2);
+	
+	
+	while (i < MAX_SEGMENTS) // reset segment info
+	{
+		segments[i].type = 0;
+		segments[i].symbol = '\0';
+		segments[i].x = 0;
+		segments[i].y = 0;
+		segments[i].speed = 0;
+		
+		i++;
+	}
+	
+	*segment_count_ptr = 0; // reset segment count
+	
+	key = 0;
 	
 }
 
@@ -606,4 +653,3 @@ void get_input()
 	if(ch == KEY_MOUSE) key = KEY_MOUSE;
 	else if(ch!=ERR) key=ch;
 }
-
