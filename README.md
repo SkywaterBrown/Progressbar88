@@ -3,6 +3,11 @@
 This game is inspired from Progressbar 95 mobile game.
 Catch falling segments to fill your progress bar.
 
+## Images
+![alt text](https://github.com/SkywaterBrown/Progressbar88/blob/main/images/at_start.png "GameStart")
+![alt text](https://github.com/SkywaterBrown/Progressbar88/blob/main/images/gameplay.png "Gameplay")
+![alt text](https://github.com/SkywaterBrown/Progressbar88/blob/main/images/score_screen.png "Score Screen")
+
 ## Installation
 
 ### Debian / Ubuntu
