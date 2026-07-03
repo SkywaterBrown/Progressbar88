@@ -8,6 +8,12 @@ Catch falling segments to fill your progress bar.
 ![alt text](https://github.com/SkywaterBrown/Progressbar88/blob/main/images/gameplay.png "Gameplay")
 ![alt text](https://github.com/SkywaterBrown/Progressbar88/blob/main/images/score_screen.png "Score Screen")
 
+## Controls
+
+- Arrow keys / WASD / Mouse — Move bar
+- Q / Esc — Quit
+
+- 
 ## Installation
 
 ### Debian / Ubuntu
@@ -51,11 +57,6 @@ Debug mode:
 ```bash
 ./pb88 debug
 ```
-
-## Controls
-
-- Arrow keys / WASD / Mouse — Move bar
-- Q / Esc — Quit
 
 ## Authors
 
